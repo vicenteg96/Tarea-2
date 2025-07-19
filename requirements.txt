@@ -1,1 +1,6 @@
 fastapi[all]
+uvicorn
+numpy
+joblib
+scikit-learn
+pydantic
