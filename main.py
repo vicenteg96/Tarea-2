@@ -85,7 +85,7 @@ def predict(payload: ImageInput):
             image_base64=(payload.image_base64 if payload.image_base64 else None),
             image_thumb_base64=image_thumb_base64,
         )
-        return JSONResponse(content=resp.model_dump())
+        return resp
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
