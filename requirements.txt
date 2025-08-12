@@ -3,7 +3,11 @@ uvicorn[standard]==0.30.6
 pydantic==2.8.2
 pillow==10.4.0
 requests==2.32.3
+
+# Dependencias de ML
 numpy==1.26.4
 h5py==3.11.0
 typing_extensions>=4.10.0
-tensorflow==2.17.1
+protobuf>=3.20.3,<5
+tensorflow==2.16.1      
+
