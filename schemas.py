@@ -1,3 +1,4 @@
+# schemas.py
 from pydantic import BaseModel, HttpUrl, field_validator
 from typing import Optional, Dict, List, Literal
 
@@ -32,9 +33,11 @@ class PredictResponse(BaseModel):
     image_size: List[int]
     input_type: Literal["image_url", "image_base64"]
 
-    # Se devuelven según el tipo de entrada
     image_url: Optional[HttpUrl] = None
     image_base64: Optional[str] = None
-
-    # Siempre devolvemos miniatura
     image_thumb_base64: Optional[str] = None
+
+    model_config = {
+        "protected_namespaces": ()
+    }
+
