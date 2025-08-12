@@ -1,62 +1,37 @@
-import joblib
-import numpy as np
-from fastapi import FastAPI
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
+from schemas import ImageInput
+from utils.image_io import load_image_from_url, load_image_from_base64
+from inference import load_model, predict_from_image
 
-rfc = joblib.load("./model/random_forest.joblib")
+app = FastAPI(
+    title="Salmon Health Classifier (model_1.h5)",
+    description="API para predecir si un salmón está sano (fresh) o infectado (infected) desde una foto.",
+    version="1.0.0",
+)
 
-def predict_taxi_trip(features_trip, confidence=0.5):
-    """Recibe un vector de características de un viaje en taxi en NYC y predice 
-       si el pasajero dejará o no una propina alta.
+@app.on_event("startup")
+def _warmup():
+    try:
+        load_model()
+        print("[startup] Modelo cargado OK")
+    except Exception as e:
+        print(f"[startup] No se pudo cargar el modelo: {e}")
 
-    Argumentos:
-        features_trip (array): Características del viaje, vector de tamaño 11.
-        confidence (float, opcional): Nivel de confianza. Por defecto es 0.5.
-    """
-    
-    pred_value = rfc.predict_proba(features_trip.reshape(1, -1))[0][1]
-    if pred_value >= confidence:
-      return 1
-    else:
-      return 0
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
-# Asignamos una instancia de la clase FastAPI a la variable "app".
-# Interacturaremos con la API usando este elemento.
-app = FastAPI(title='Implementando un modelo de Machine Learning usando FastAPI')
+@app.post("/predict")
+def predict(payload: ImageInput):
+    try:
+        if payload.image_url:
+            img = load_image_from_url(str(payload.image_url))
+        else:
+            img = load_image_from_base64(payload.image_base64)  # type: ignore
 
-# Creamos una clase para el vector de features de entrada
-class Item(BaseModel):
-    pickup_weekday: float
-    pickup_hour: float
-    work_hours: float
-    pickup_minute: float
-    passenger_count: float
-    trip_distance: float
-    trip_time: float
-    trip_speed: float
-    PULocationID: float
-    DOLocationID: float
-    RatecodeID: float
+        result = predict_from_image(img)
+        return JSONResponse(content={"ok": True, "result": result})
 
-# Usando @app.get("/") definimos un método GET para el endpoint / (que sería como el "home").
-@app.get("/")
-def home():
-    return "¡Felicitaciones! Tu API está funcionando según lo esperado. Anda ahora a http://localhost:8000/docs."
-
-
-# Este endpoint maneja la lógica necesaria para clasificar.
-# Requiere como entrada el vector de características del viaje y el umbral de confianza para la clasificación.
-@app.post("/predict") 
-def prediction(item: Item, confidence: float):
-
-    
-    # 1. Correr el modelo de clasificación
-    features_trip = np.array([item.pickup_weekday, item.pickup_hour, item.work_hours, item.pickup_minute, item.passenger_count, item.trip_distance,
-                    item.trip_time, item.trip_speed, item.PULocationID, item.DOLocationID, item.RatecodeID])
-    pred = predict_taxi_trip(features_trip, confidence)
-    
-    # 2. Transmitir la respuesta de vuelta al cliente
-
-    # Retornar el resultado de la predicción
-    return {'predicted_class': pred}
-
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
