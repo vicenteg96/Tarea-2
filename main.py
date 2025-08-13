@@ -2,6 +2,10 @@ import time, uuid
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
+from schemas import ImageInput, PredictResponse
+from utils.image_io import load_image_from_url, load_image_from_base64, make_thumbnail_base64
+from inference import load_model, predict_from_image, get_model_version, INPUT_SIZE, CLASSES
+
 
 from schemas import ImageInput, PredictResponse
 from utils.image_io import (
@@ -46,30 +50,40 @@ def root():
 
 @app.post("/predict", response_model=PredictResponse)
 def predict(payload: ImageInput):
+    """
+    Recibe image_url o image_base64 (exactamente uno), ejecuta predicción y
+    devuelve JSON con metadatos + miniatura en base64.
+    """
     try:
         t0 = time.perf_counter()
         input_type = "image_url" if payload.image_url else "image_base64"
 
+        # 1) Cargar imagen
         if payload.image_url:
             img = load_image_from_url(str(payload.image_url))
         else:
             img = load_image_from_base64(payload.image_base64)  # type: ignore
 
+        # 2) Predicción
+        load_model()  # asegura que el modelo esté cargado
         raw = predict_from_image(img)  # {"cls_idx": int, "probs": [p0,p1]}
-        probs = {cls: float(round(raw["probs"][i], 6)) for i, cls in enumerate(CLASSES)}
+        probs = {CLASSES[i]: float(round(raw["probs"][i], 6)) for i in range(len(CLASSES))}
         label = CLASSES[raw["cls_idx"]]
 
+        # 3) Decisión con umbral
         threshold = float(payload.threshold if payload.threshold is not None else 0.5)
         decision = "infected" if probs["infected"] >= threshold else "fresh"
 
-        # Miniatura siempre
+        # 4) Miniatura (base64) siempre
         image_thumb_base64 = make_thumbnail_base64(img)
 
         took_ms = int((time.perf_counter() - t0) * 1000)
-        resp = PredictResponse(
+
+        # 5) Respuesta tipada (deja a FastAPI serializar)
+        return PredictResponse(
             ok=True,
             request_id=str(uuid.uuid4()),
-            model_version=get_model_version(),  # o "model_1.h5"
+            model_version=get_model_version(),
             took_ms=took_ms,
 
             label=label,
@@ -85,21 +99,6 @@ def predict(payload: ImageInput):
             image_base64=(payload.image_base64 if payload.image_base64 else None),
             image_thumb_base64=image_thumb_base64,
         )
-        return resp
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-
-from fastapi import Response
-from utils.image_io import load_image_from_url, load_image_from_base64, make_thumbnail_bytes
-from schemas import ImageInput
-
-@app.post("/predict_thumb")
-def predict_thumb(payload: ImageInput):
-    try:
-        img = load_image_from_url(str(payload.image_url)) if payload.image_url \
-             else load_image_from_base64(payload.image_base64)  # type: ignore
-        jpeg = make_thumbnail_bytes(img)
-        return Response(content=jpeg, media_type="image/jpeg")
-    except Exception as e:
-        return Response(content=str(e), media_type="text/plain", status_code=400)
