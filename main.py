@@ -1,58 +1,44 @@
-import time, uuid
+# main.py
+import time
+import uuid
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
+
 from schemas import ImageInput, PredictResponse
 from utils.image_io import load_image_from_url, load_image_from_base64, make_thumbnail_base64
 from inference import load_model, predict_from_image, get_model_version, INPUT_SIZE, CLASSES
 
-
-from schemas import ImageInput, PredictResponse
-from utils.image_io import (
-    load_image_from_url,
-    load_image_from_base64,
-    make_thumbnail_base64,
-)
-from inference import (
-    load_model,
-    predict_from_image,
-    get_model_version,   # si no lo tienes, puedes devolver "model_1.h5"
-    INPUT_SIZE,
-    CLASSES,
-)
-
+# Crear la app FastAPI
 app = FastAPI(
-    title="Salmon Health Classifier (model_1.h5)",
-    description="API para predecir si un salmón está sano (fresh) o infectado (infected) desde una foto.",
-    version="1.2.0",
+    title="Clasificador de Pescado",
+    description="API para clasificar imágenes de pescado como fresh/infected",
+    version="1.0.0"
 )
 
+# Middleware CORS para permitir peticiones desde cualquier origen
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], allow_credentials=False, allow_methods=["*"], allow_headers=["*"],
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 @app.on_event("startup")
-def _warmup():
-    try:
-        load_model()
-        print("[startup] Modelo cargado OK")
-    except Exception as e:
-        print(f"[startup] No se pudo cargar el modelo: {e}")
+def startup_event():
+    """Carga el modelo al iniciar el servidor."""
+    load_model()
+    print("[startup] Modelo cargado OK")
 
-@app.get("/health")
-def health():
-    return {"status": "ok"}
-
-@app.get("/", include_in_schema=False)
+@app.get("/")
 def root():
-    return RedirectResponse(url="/docs")
+    return {"ok": True, "message": "API de Clasificación de Pescado lista"}
 
 @app.post("/predict", response_model=PredictResponse)
 def predict(payload: ImageInput):
     """
-    Recibe image_url o image_base64 (exactamente uno), ejecuta predicción y
-    devuelve JSON con metadatos + miniatura en base64.
+    Recibe image_url o image_base64, ejecuta predicción (argmax)
+    y devuelve JSON con metadatos + miniatura en base64. Sin threshold.
     """
     try:
         t0 = time.perf_counter()
@@ -64,22 +50,19 @@ def predict(payload: ImageInput):
         else:
             img = load_image_from_base64(payload.image_base64)  # type: ignore
 
-        # 2) Predicción
-        load_model()  # asegura que el modelo esté cargado
-        raw = predict_from_image(img)  # {"cls_idx": int, "probs": [p0,p1]}
+        # 2) Predicción (argmax)
+        load_model()  # asegura modelo en memoria
+        raw = predict_from_image(img)  # {"cls_idx": int, "probs": [p0, p1]}
         probs = {CLASSES[i]: float(round(raw["probs"][i], 6)) for i in range(len(CLASSES))}
         label = CLASSES[raw["cls_idx"]]
 
-        # 3) Decisión con umbral
-        threshold = float(payload.threshold if payload.threshold is not None else 0.5)
-        decision = "infected" if probs["infected"] >= threshold else "fresh"
+        # 3) decision = label (sin threshold)
+        decision = label
 
-        # 4) Miniatura (base64) siempre
+        # 4) Miniatura (base64)
         image_thumb_base64 = make_thumbnail_base64(img)
 
         took_ms = int((time.perf_counter() - t0) * 1000)
-
-        # 5) Respuesta tipada (deja a FastAPI serializar)
         return PredictResponse(
             ok=True,
             request_id=str(uuid.uuid4()),
@@ -89,7 +72,6 @@ def predict(payload: ImageInput):
             label=label,
             score=probs[label],
             decision=decision,
-            threshold=threshold,
             probs=probs,
             classes=CLASSES,
             image_size=[INPUT_SIZE[0], INPUT_SIZE[1]],

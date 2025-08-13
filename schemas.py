@@ -5,7 +5,8 @@ from typing import Optional, Dict, List, Literal
 class ImageInput(BaseModel):
     image_url: Optional[HttpUrl] = None
     image_base64: Optional[str] = None
-    threshold: Optional[float] = 0.5
+    # Mantener por compatibilidad, pero se IGNORA en el servidor
+    threshold: Optional[float] = None
 
     @field_validator("image_base64")
     @classmethod
@@ -24,20 +25,21 @@ class PredictResponse(BaseModel):
     model_version: str
     took_ms: int
 
+    # salida principal
     label: str
     score: float
-    decision: str
-    threshold: float
+    decision: str  # = label (sin threshold)
     probs: Dict[str, float]
     classes: List[str]
     image_size: List[int]
     input_type: Literal["image_url", "image_base64"]
 
+    # eco/soporte
     image_url: Optional[HttpUrl] = None
     image_base64: Optional[str] = None
     image_thumb_base64: Optional[str] = None
 
+    # evitar warning por 'model_version'
     model_config = {
         "protected_namespaces": ()
     }
-
