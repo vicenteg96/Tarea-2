@@ -24,3 +24,10 @@ def make_thumbnail_base64(img: Image.Image, max_size=(128, 128),
     thumb.thumbnail(max_size)  # mantiene aspect ratio
     return image_to_base64(thumb, fmt=fmt, quality=quality)
 
+def make_thumbnail_bytes(img, max_size=(128,128), fmt="JPEG", quality=70):
+    import io
+    from PIL import Image
+    thumb = img.copy(); thumb.thumbnail(max_size)
+    buf = io.BytesIO(); thumb.save(buf, format=fmt, quality=quality, optimize=True)
+    return buf.getvalue()
+

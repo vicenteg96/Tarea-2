@@ -89,3 +89,17 @@ def predict(payload: ImageInput):
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+from fastapi import Response
+from utils.image_io import load_image_from_url, load_image_from_base64, make_thumbnail_bytes
+from schemas import ImageInput
+
+@app.post("/predict_thumb")
+def predict_thumb(payload: ImageInput):
+    try:
+        img = load_image_from_url(str(payload.image_url)) if payload.image_url \
+             else load_image_from_base64(payload.image_base64)  # type: ignore
+        jpeg = make_thumbnail_bytes(img)
+        return Response(content=jpeg, media_type="image/jpeg")
+    except Exception as e:
+        return Response(content=str(e), media_type="text/plain", status_code=400)
