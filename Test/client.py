@@ -60,3 +60,54 @@ def main():
 if __name__ == "__main__":
     main()
 
+
+
+# client.py
+import requests, base64
+from PIL import Image
+from io import BytesIO
+from IPython.display import display  # si vas a usarlo desde Jupyter
+
+URL_API = "https://tarea-2-4ivb.onrender.com/predict"
+
+def predict_any(image_url: str | None = None, image_path: str | None = None, timeout: int = 20):
+    if bool(image_url) == bool(image_path):
+        raise ValueError("Proporciona exactamente uno: image_url o image_path.")
+
+    if image_url:
+        payload = {"image_url": image_url}
+    else:
+        with open(image_path, "rb") as f:
+            img_b64 = base64.b64encode(f.read()).decode("utf-8")
+        payload = {"image_base64": img_b64}
+
+    try:
+        r = requests.post(URL_API, json=payload, timeout=timeout)
+    except requests.RequestException as e:
+        print("Error de red:", e)
+        return
+
+    print("HTTP", r.status_code)
+
+    try:
+        data = r.json()
+    except ValueError:
+        print("Respuesta no JSON:", r.text[:400])
+        return
+
+    if r.ok:
+        print("Label:", data.get("label"))
+        print("Decision:", data.get("decision"))
+        print("Score:", data.get("score"))
+        print("Probabilidades:", data.get("probs"))
+
+        thumb_b64 = data.get("image_thumb_base64")
+        if thumb_b64:
+            try:
+                img = Image.open(BytesIO(base64.b64decode(thumb_b64)))
+                display(img)
+            except Exception as e:
+                print("No se pudo mostrar la miniatura:", e)
+    else:
+        print("Error:", data.get("detail", data))
+
