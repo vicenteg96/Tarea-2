@@ -1,11 +1,9 @@
-# schemas.py
 from pydantic import BaseModel, HttpUrl, field_validator
 from typing import Optional, Dict, List, Literal
 
 class ImageInput(BaseModel):
     image_url: Optional[HttpUrl] = None
     image_base64: Optional[str] = None
-    # Mantener por compatibilidad, pero se IGNORA en el servidor
     threshold: Optional[float] = None
 
     @field_validator("image_base64")
